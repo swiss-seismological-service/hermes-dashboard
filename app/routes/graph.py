@@ -31,10 +31,9 @@ forecast_cat.rename(columns={"realization_id": "catalog_id", }, inplace=True)
 # get observation data
 client = FDSNWSEventClient(url="http://eida.ethz.ch/fdsnws/event/1/query")
 observation_cat = client.get_events(
-    start_time=date,
-    end_time=date - timedelta(days=365),
+    start_time=date - timedelta(days=365),
+    end_time=date,
     min_magnitude=2.5)
-
 
 # past probabilities in all CH
 longterm_avg_weekly_p = 0.2715
@@ -88,6 +87,7 @@ def prepare_forecast_map(simulations, n_simulations):
 
 def plot_rel_map(simulations, m_thresh, cmap,
                  n_simulations=100000, scatter_catalog=pd.DataFrame()):
+
     if cmap == cmc.batlowK or cmap == cmc.batlow:
         scatter_color = 'w'
     else:
@@ -127,19 +127,18 @@ def plot_rel_map(simulations, m_thresh, cmap,
         norm=norm,
         extent=[lon_bins[0], lon_bins[-1], lat_bins[0], lat_bins[-1]],
         interpolation='bilinear',
-        # vmin = -5, vmax=0
+
     )
 
     dot_sizes = dot_size([*scatter_catalog["magnitude"], 7.5],
                          smallest=10, largest=2600, interpolation_power=3)[:-1]
-    # dot_sizes = 10
+
     ax.scatter(
         scatter_catalog['longitude'],
         scatter_catalog['latitude'],
         color='none', edgecolor=scatter_color, marker='o',
         s=dot_sizes,
         linewidth=0.5,
-        # alpha=0.5,
     )
 
     # show only the part inside the polygon
@@ -170,9 +169,6 @@ def plot_rel_map(simulations, m_thresh, cmap,
     cbar.set_ticks(cbar_ticks, labels=cbar_labels)
     ax.set_aspect(1.4)
     ax.axis('off')
-
-    # plt.savefig(filename)
-    # plt.show()
     return fig
 
 
