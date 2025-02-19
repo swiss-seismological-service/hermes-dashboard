@@ -25,13 +25,16 @@ home = st.Page(page='routes/home.py',
                title='Dashboard',
                default=True)
 
-subpage = st.Page(page='routes/sub.py',
-                  title='Subpage')
+# subpage = st.Page(page='routes/sub.py',
+#                   title='Subpage')
 
 graph = st.Page(page='routes/graph.py',
                 title='Graph')
 
-pg = st.navigation([home, subpage, graph])
+pg = st.navigation([home,
+                    # subpage,
+                    graph
+                    ])
 
 
 with st.sidebar.container():
