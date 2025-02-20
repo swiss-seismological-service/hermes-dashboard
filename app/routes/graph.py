@@ -68,6 +68,7 @@ def get_forecast_cat(modelrun_oid: str) -> ForecastCatalog:
 def calculate_forecast_values(forecast_cat: pd.DataFrame,
                               n_simulations: int,
                               bounding_polygon: Polygon) -> np.ndarray:
+    # TODO: implement line 74-91 on database & webservice side
     # construct grid
     min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
     binsize = 0.05
@@ -86,9 +87,10 @@ def calculate_forecast_values(forecast_cat: pd.DataFrame,
 
     forecast = forecast_cat.groupby(
         ['latitude_cut', 'longitude_cut'], observed=False) \
-        .size().unstack() / n_simulations
+        .size().unstack()
 
-    ratio = ((1 - np.exp(-forecast.values)) / longterm_bg_weekly_cell_p)
+    ratio = ((1 - np.exp(-forecast.values / n_simulations))
+             / longterm_bg_weekly_cell_p)
 
     return np.clip(ratio, a_min=1, a_max=None)
 
@@ -204,9 +206,9 @@ forecast = get_forecast(st.session_state['forecastseries']['oid'])
 starttime = datetime.fromisoformat(forecast['starttime'])
 
 modelrun = next((r for r in forecast['modelruns']
-                if r['status'] == 'COMPLETED'
-                and r['modelconfig_name']
-                == st.session_state['model_config']['name']), None)
+                 if r['status'] == 'COMPLETED'
+                 and r['modelconfig_name']
+                 == st.session_state['model_config']['name']), None)
 
 if modelrun is None:
     st.error('No completed modelruns found for '
