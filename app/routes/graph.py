@@ -1,7 +1,6 @@
 import io
 from datetime import datetime, timedelta
 
-import cartopy.crs as ccrs
 import cmcrameri.cm as cmc
 import geopandas
 import matplotlib.pyplot as plt
@@ -13,102 +12,91 @@ from cartopy.io import shapereader
 from matplotlib import colors
 from seismostats import Catalog, ForecastCatalog
 from seismostats.plots.basics import dot_size
-from shapely import wkt
+from shapely import Polygon, wkt
 
 from app import get_config
 
-n_simulations = 10000
-date = datetime(2025, 2, 15, 12, 0, 0)
-forecast_mag_threshold = 5.0
-min_mag_stored = 2.5
 
-# get forecasts
-response = requests.get(f'{get_config().WEBSERVICE_URL}'
-                        '/v1/forecastseries/'
-                        f'{st.session_state['forecastseries']['oid']}'
-                        '/forecasts'
-                        )
+@st.cache_data
+def get_forecast(forecastseries_oid: str) -> dict:
+    response = requests.get(f'{get_config().WEBSERVICE_URL}'
+                            '/v1/forecastseries/'
+                            f'{forecastseries_oid}'
+                            '/forecasts'
+                            )
 
-if not response.ok or response.json() == []:
-    st.error('No completed forecasts found for '
-             f'"{st.session_state["forecastseries"]["name"]}".')
-    st.stop()
+    if not response.ok or response.json() == []:
+        st.error('No completed forecasts found for '
+                 f'"{st.session_state["forecastseries"]["name"]}".')
+        st.stop()
 
-forecasts = [r for r in response.json() if r['status'] == 'COMPLETED']
+    forecasts = [r for r in response.json() if r['status'] == 'COMPLETED']
 
-forecast = forecasts[0]
+    forecast = forecasts[0]
 
-response = requests.get(f'{get_config().WEBSERVICE_URL}'
-                        '/v1/forecasts/'
-                        f'{forecast["oid"]}'
-                        )
+    response = requests.get(f'{get_config().WEBSERVICE_URL}'
+                            '/v1/forecasts/'
+                            f'{forecast["oid"]}'
+                            )
 
-forecast = response.json()
-
-modelrun = next((r for r in forecast['modelruns']
-                if r['status'] == 'COMPLETED'
-                and r['modelconfig_name']
-                == st.session_state['model_config']['name']), None)
-
-if modelrun is None:
-    st.error('No completed modelruns found for '
-             f'"{st.session_state["model_config"]["name"]}".')
-    st.stop()
-
-response = requests.get(f'{get_config().WEBSERVICE_URL}'
-                        '/v1/forecasts/'
-                        f'{forecast["oid"]}'
-                        '/seismicityobservations')
-
-# get observation data
-observation_cat = Catalog.from_quakeml(response.text)
-observation_cat = observation_cat[
-    (observation_cat['time'] >= date - timedelta(days=365))
-    & (observation_cat['time'] < date)
-    & (observation_cat['magnitude'] >= 2.5)]
+    return response.json()
 
 
-# get forecast data
-response = requests.get(
-    f'{get_config().WEBSERVICE_URL}/v2/modelruns/{modelrun['oid']}/result')
-df = pd.read_csv(io.StringIO(response.text))
-forecast_cat = ForecastCatalog(df)
-forecast_cat['time'] = pd.to_datetime(forecast_cat['time'])
-forecast_cat.rename(columns={'realization_id': 'catalog_id', }, inplace=True)
-
-# past probabilities in all CH
-longterm_avg_weekly_p = 0.2715
-longterm_bg_weekly_cell_p = 0.0001
-
-# spatial probabilities
-bg_rates = pd.read_csv('app/static/SUIhaz2015_rates.csv', index_col=0)
-bg_rates.query('in_poly', inplace=True)
-
-bg_lats = np.unique(bg_rates.query('in_poly')['latitude'])
-bg_lons = np.unique(bg_rates.query('in_poly')['longitude'])
-binsize = np.min(np.diff(bg_lats))
-
-# read ch shape polygon
-ch_shape = wkt.loads(st.session_state['forecastseries']['bounding_polygon'])
-x, y = ch_shape.exterior.xy
-ch_shape = list(zip(x, y))
+@st.cache_resource
+def get_observation_cat(forecast: dict) -> Catalog:
+    response = requests.get(f'{get_config().WEBSERVICE_URL}'
+                            '/v1/forecasts/'
+                            f'{forecast["oid"]}'
+                            '/seismicityobservations')
+    # get observation data
+    return Catalog.from_quakeml(response.text)
 
 
-ll_proj = ccrs.PlateCarree()  # CRS for raw long/lat
+@st.cache_resource
+def get_forecast_cat(modelrun_oid: str) -> ForecastCatalog:
+    # get forecast data
+    response = requests.get(
+        f'{get_config().WEBSERVICE_URL}/v2/modelruns/{modelrun_oid}/result')
+    df = pd.read_csv(io.StringIO(response.text))
+    forecast_cat = ForecastCatalog(df)
+    forecast_cat['time'] = pd.to_datetime(forecast_cat['time'])
+    forecast_cat.rename(
+        columns={'realization_id': 'catalog_id', }, inplace=True)
+    return forecast_cat
 
-# request data for use by geopandas
-resolution = '10m'
-category = 'cultural'
-name = 'admin_0_countries'
-country = 'Switzerland'
-shpfilename = shapereader.natural_earth(resolution, category, name)
-df = geopandas.read_file(shpfilename)
-# get geometry of a country
 
-poly = [df.loc[df['ADMIN'] == country]['geometry'].values[0]]
+def calculate_forecast_values(forecast_cat: pd.DataFrame,
+                              n_simulations: int,
+                              bounding_polygon: Polygon) -> np.ndarray:
+    # construct grid
+    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
+    binsize = 0.05
+    num_lat_bins = round((max_lat - min_lat) / binsize) + 1
+    num_lon_bins = round((max_lon - min_lon) / binsize) + 1
+
+    bg_lats = np.linspace(min_lat, max_lat, num_lat_bins)
+    bg_lons = np.linspace(min_lon, max_lon, num_lon_bins)
+
+    forecast_cat['latitude_cut'] = pd.cut(forecast_cat.latitude, bg_lats)
+    forecast_cat['longitude_cut'] = pd.cut(forecast_cat.longitude, bg_lons)
+
+    # past probabilities in all CH
+    # longterm_avg_weekly_p = 0.2715
+    longterm_bg_weekly_cell_p = 0.0001
+
+    forecast = forecast_cat.groupby(
+        ['latitude_cut', 'longitude_cut'], observed=False) \
+        .size().unstack() / n_simulations
+
+    ratio = ((1 - np.exp(-forecast.values)) / longterm_bg_weekly_cell_p)
+
+    return np.clip(ratio, a_min=1, a_max=None)
 
 
-def p_event_all_ch_extrapolate(simulations, n_simulations, delta_m_min, beta):
+def p_event_all_ch_extrapolate(simulations: pd.DataFrame,
+                               n_simulations: int,
+                               delta_m_min: float,
+                               beta: float) -> float:
 
     p_event = []
 
@@ -120,31 +108,14 @@ def p_event_all_ch_extrapolate(simulations, n_simulations, delta_m_min, beta):
     return p_event
 
 
-def prepare_forecast_map(simulations, n_simulations):
-    forecast = simulations.groupby(
-        ['latitude_cut', 'longitude_cut']).size().unstack() / n_simulations
-    ratio = ((1 - np.exp(-forecast.values)) / longterm_bg_weekly_cell_p)
-    ratio = np.clip(ratio, a_min=1, a_max=None)
-    return ratio
+def plot_rel_map(ratio: np.ndarray,
+                 scatter_catalog: pd.DataFrame,
+                 m_thresh: float,
+                 bounding_polygon: Polygon) -> plt.Figure:
 
-
-def plot_rel_map(simulations, m_thresh, cmap,
-                 n_simulations=100000, scatter_catalog=pd.DataFrame()):
-
-    if cmap == cmc.batlowK or cmap == cmc.batlow:
-        scatter_color = 'w'
-    else:
-        scatter_color = 'k'
-
-    # make array of latitude bins and longitude bins
-    lat_bins = np.arange(bg_lats[0] - binsize / 2,
-                         bg_lats[-1] + binsize, binsize)
-    lon_bins = np.arange(bg_lons[0] - binsize / 2,
-                         bg_lons[-1] + binsize, binsize)
-
-    # use pandas cut to put simulations in same grid as bg_rates
-    simulations['latitude_cut'] = pd.cut(simulations.latitude, lat_bins)
-    simulations['longitude_cut'] = pd.cut(simulations.longitude, lon_bins)
+    cmap = cmc.lajolla_r
+    cmap.set_under(cmap(0.0))
+    scatter_color = 'k'
 
     # use logarithmic colorscale
     fig, ax = plt.subplots(figsize=(10, 8), nrows=1)
@@ -153,56 +124,65 @@ def plot_rel_map(simulations, m_thresh, cmap,
     norm_min = 0.5
     norm_max = 3.1
     norm = colors.BoundaryNorm(np.arange(norm_min, norm_max, 0.02), cmap.N)
-    cmap.set_under(cmap(0.0))
 
-    ############
-    # MAP PLOT #
-    ############
-
-    ratio = prepare_forecast_map(simulations, n_simulations)
     ax.set_title('Earthquake forecast for Switzerland on {}'.format(
-        date.strftime('%d. %m. %Y %H:%M')))
+        starttime.strftime('%d.%m.%Y %H:%M')))
 
+    # plot forecast values
+    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
     im = ax.imshow(
         np.log10(ratio),
         origin='lower',
         cmap=cmap,
         norm=norm,
-        extent=[lon_bins[0], lon_bins[-1], lat_bins[0], lat_bins[-1]],
+        extent=[min_lon, max_lon, min_lat, max_lat],
         interpolation='bilinear',
-
     )
 
+    # plot observed events
     dot_sizes = dot_size([*scatter_catalog['magnitude'], 7.5],
                          smallest=10, largest=2600, interpolation_power=3)[:-1]
 
-    ax.scatter(
-        scatter_catalog['longitude'],
-        scatter_catalog['latitude'],
-        color='none', edgecolor=scatter_color, marker='o',
-        s=dot_sizes,
-        linewidth=0.5,
-    )
+    ax.scatter(scatter_catalog['longitude'],
+               scatter_catalog['latitude'],
+               color='none',
+               edgecolor=scatter_color,
+               marker='o',
+               s=dot_sizes,
+               linewidth=0.5,
+               )
 
     # show only the part inside the polygon
-    chpoly = plt.Polygon(
-        np.flip(ch_shape), edgecolor='k', facecolor='none', lw=0, zorder=10,
-        # ch_shape, edgecolor='k', facecolor='none', lw=0, zorder=10,
-        transform=ax.transData, figure=fig
-    )
+    x, y = bounding_polygon.exterior.xy
+    data_clip_path = list(zip(y, x))
+    chpoly = plt.Polygon(data_clip_path,
+                         edgecolor='k',
+                         facecolor='none',
+                         lw=0,
+                         zorder=10,
+                         transform=ax.transData,
+                         figure=fig)
     ax.add_patch(chpoly)
     im.set_clip_path(chpoly)
-    ax.plot(
-        poly[0].exterior.xy[0],
-        poly[0].exterior.xy[1],
-        color=scatter_color, lw=1, zorder=10
-    )
 
+    # border of Switzerland
+    shpfilename = shapereader.natural_earth('10m',
+                                            'cultural',
+                                            'admin_0_countries')
+    df = geopandas.read_file(shpfilename)
+    poly = [df.loc[df['ADMIN'] == 'Switzerland']['geometry'].values[0]]
+
+    ax.plot(poly[0].exterior.xy[0],
+            poly[0].exterior.xy[1],
+            color=scatter_color,
+            lw=1,
+            zorder=10)
+
+    # Colorbar and legend
     cbar = plt.colorbar(
         im, label=f'Probability increase to a normal day\nof at least one M≥{
             m_thresh:.1f} event in 7 days',
-        shrink=0.5, orientation='horizontal', pad=0.0, extend='max'
-    )
+        shrink=0.5, orientation='horizontal', pad=0.0, extend='max')
     cbar.ax.minorticks_off()
     cbar_ticks = np.arange(norm_min, norm_max, 0.5)
     cbar_labels = [r'{}$\times$'.format(np.format_float_positional(
@@ -216,14 +196,50 @@ def plot_rel_map(simulations, m_thresh, cmap,
     return fig
 
 
+forecast_mag_threshold = 5.0
+n_simulations = 10000  # n_simulations in model settings!!!!
+min_mag_stored = 2.5  # m_thresh in model config!!!!
+
+forecast = get_forecast(st.session_state['forecastseries']['oid'])
+starttime = datetime.fromisoformat(forecast['starttime'])
+
+modelrun = next((r for r in forecast['modelruns']
+                if r['status'] == 'COMPLETED'
+                and r['modelconfig_name']
+                == st.session_state['model_config']['name']), None)
+
+if modelrun is None:
+    st.error('No completed modelruns found for '
+             f'"{st.session_state["model_config"]["name"]}".')
+    st.stop()
+
+observation_cat = get_observation_cat(forecast)
+
+observation_cat = observation_cat[
+    (observation_cat['time'] >= starttime - timedelta(days=365))
+    & (observation_cat['time'] < starttime)
+    & (observation_cat['magnitude'] >= min_mag_stored)]
+
+forecast_cat = get_forecast_cat(modelrun['oid'])
+
+bounding_polygon = wkt.loads(
+    st.session_state['forecastseries']['bounding_polygon'])
+
+ratio = calculate_forecast_values(forecast_cat,
+                                  n_simulations,
+                                  bounding_polygon)
+
+
 # probability for all of Switzerland
-p_event = p_event_all_ch_extrapolate(
-    forecast_cat, n_simulations,
-    forecast_mag_threshold - min_mag_stored, np.log(10))
-my_plot = plot_rel_map(forecast_cat, 5.0,
-                       cmc.lajolla_r,
-                       n_simulations=n_simulations,
-                       scatter_catalog=observation_cat)
+p_event = p_event_all_ch_extrapolate(forecast_cat,
+                                     n_simulations,
+                                     forecast_mag_threshold - min_mag_stored,
+                                     np.log(10))
+
+my_plot = plot_rel_map(ratio,
+                       observation_cat,
+                       forecast_mag_threshold,
+                       bounding_polygon)
 
 
 st.write(
