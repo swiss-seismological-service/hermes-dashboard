@@ -18,7 +18,7 @@ from app import get_config
 
 
 @st.cache_data
-def get_forecast(forecastseries_oid: str) -> dict:
+def get_forecasts(forecastseries_oid: str) -> list:
     response = requests.get(f'{get_config().WEBSERVICE_URL}'
                             '/v1/forecastseries/'
                             f'{forecastseries_oid}'
@@ -30,14 +30,23 @@ def get_forecast(forecastseries_oid: str) -> dict:
                  f'"{st.session_state["forecastseries"]["name"]}".')
         st.stop()
 
-    forecasts = [r for r in response.json() if r['status'] == 'COMPLETED']
+    response = response.json()
+    response.sort(key=lambda x: datetime.strptime(
+        x['starttime'], '%Y-%m-%dT%H:%M:%S'), reverse=False)
+    return response
 
-    forecast = forecasts[0]
 
+@st.cache_data
+def get_forecast(forecast_oid: str) -> dict:
     response = requests.get(f'{get_config().WEBSERVICE_URL}'
                             '/v1/forecasts/'
-                            f'{forecast["oid"]}'
+                            f'{forecast_oid}'
                             )
+
+    if not response.ok:
+        st.error('No forecast found for '
+                 f'"{st.session_state["forecast"]["name"]}".')
+        st.stop()
 
     return response.json()
 
@@ -63,36 +72,6 @@ def get_forecast_cat(modelrun_oid: str) -> ForecastCatalog:
     forecast_cat.rename(
         columns={'realization_id': 'catalog_id', }, inplace=True)
     return forecast_cat
-
-
-def calculate_forecast_values(forecast_cat: pd.DataFrame,
-                              n_simulations: int,
-                              bounding_polygon: Polygon) -> np.ndarray:
-    # TODO: implement line 74-91 on database & webservice side
-    # construct grid
-    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
-    binsize = 0.05
-    num_lat_bins = round((max_lat - min_lat) / binsize) + 1
-    num_lon_bins = round((max_lon - min_lon) / binsize) + 1
-
-    bg_lats = np.linspace(min_lat, max_lat, num_lat_bins)
-    bg_lons = np.linspace(min_lon, max_lon, num_lon_bins)
-
-    forecast_cat['latitude_cut'] = pd.cut(forecast_cat.latitude, bg_lats)
-    forecast_cat['longitude_cut'] = pd.cut(forecast_cat.longitude, bg_lons)
-
-    # past probabilities in all CH
-    # longterm_avg_weekly_p = 0.2715
-    longterm_bg_weekly_cell_p = 0.0001
-
-    forecast = forecast_cat.groupby(
-        ['latitude_cut', 'longitude_cut'], observed=False) \
-        .size().unstack()
-
-    ratio = ((1 - np.exp(-forecast.values / n_simulations))
-             / longterm_bg_weekly_cell_p)
-
-    return np.clip(ratio, a_min=1, a_max=None)
 
 
 def p_event_all_ch_extrapolate(simulations: pd.DataFrame,
@@ -198,11 +177,54 @@ def plot_rel_map(ratio: np.ndarray,
     return fig
 
 
+def get_event_counts(modelrun_oid: str, geometry: Polygon, n_simulations):
+    min_lat, min_lon, max_lat, max_lon = geometry.bounds
+    bin = 0.05  # approximate bin size
+    res_lon = (max_lon - min_lon) / (round((max_lon - min_lon) / bin))
+    res_lat = (max_lat - min_lat) / (round((max_lat - min_lat) / bin))
+
+    response = requests.get(
+        f'{get_config().WEBSERVICE_URL}/v2/modelruns/'
+        f'{modelrun_oid}/eventcounts',
+        params={
+            'min_lon': min_lon,
+            'min_lat': min_lat,
+            'max_lon': max_lon,
+            'max_lat': max_lat,
+            'res_lon': res_lon,
+            'res_lat': res_lat,
+        }
+    )
+    df = pd.read_csv(io.StringIO(response.text))
+
+    matrix_df = df.pivot(index="grid_lat",
+                         columns="grid_lon",
+                         values="point_count").fillna(0)
+
+    longterm_bg_weekly_cell_p = 0.0001
+
+    ratio = ((1 - np.exp(-matrix_df.values / n_simulations))
+             / longterm_bg_weekly_cell_p)
+
+    return np.clip(ratio, a_min=1, a_max=None)
+
+
 forecast_mag_threshold = 5.0
 n_simulations = 10000  # n_simulations in model settings!!!!
 min_mag_stored = 2.5  # m_thresh in model config!!!!
 
-forecast = get_forecast(st.session_state['forecastseries']['oid'])
+forecasts = get_forecasts(st.session_state['forecastseries']['oid'])
+forecasts = [f for f in forecasts if f['status'] == 'COMPLETED']
+
+forecast = st.select_slider(
+    "Select a forecast",
+    options=forecasts,
+    value=forecasts[0],
+    format_func=lambda x: x['starttime']
+)
+
+forecast = get_forecast(forecast['oid'])
+
 starttime = datetime.fromisoformat(forecast['starttime'])
 
 modelrun = next((r for r in forecast['modelruns']
@@ -227,10 +249,7 @@ forecast_cat = get_forecast_cat(modelrun['oid'])
 bounding_polygon = wkt.loads(
     st.session_state['forecastseries']['bounding_polygon'])
 
-ratio = calculate_forecast_values(forecast_cat,
-                                  n_simulations,
-                                  bounding_polygon)
-
+ratio = get_event_counts(modelrun['oid'], bounding_polygon, n_simulations)
 
 # probability for all of Switzerland
 p_event = p_event_all_ch_extrapolate(forecast_cat,
@@ -238,13 +257,14 @@ p_event = p_event_all_ch_extrapolate(forecast_cat,
                                      forecast_mag_threshold - min_mag_stored,
                                      np.log(10))
 
-my_plot = plot_rel_map(ratio,
-                       observation_cat,
-                       forecast_mag_threshold,
-                       bounding_polygon)
-
+my_plot2 = plot_rel_map(ratio,
+                        observation_cat,
+                        forecast_mag_threshold,
+                        bounding_polygon)
 
 st.write(
     f'Probability of observing at least one M≥{forecast_mag_threshold} event'
     f' in Switzerland in the next 7 days: {p_event * 100:.2f}%')
-st.pyplot(my_plot)
+
+# st.pyplot(my_plot)
+st.pyplot(my_plot2)
