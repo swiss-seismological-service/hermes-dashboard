@@ -47,16 +47,6 @@ def get_forecast(forecast_oid: str) -> dict:
 
 
 @st.cache_resource
-def get_observation_cat(forecast: dict) -> Catalog:
-    response = requests.get(f'{get_config().WEBSERVICE_URL}'
-                            '/v1/forecasts/'
-                            f'{forecast["oid"]}'
-                            '/seismicityobservations')
-    # get observation data
-    return Catalog.from_quakeml(response.text)
-
-
-@st.cache_resource
 def get_forecast_cat(modelrun_oid: str) -> ForecastCatalog:
     # get forecast data
     response = requests.get(
@@ -99,3 +89,50 @@ def get_event_counts(modelrun_oid: str, geometry: Polygon, n_simulations):
              / longterm_bg_weekly_cell_p)
 
     return np.clip(ratio, a_min=1, a_max=None)
+
+
+def get_forecast_seismicityobservation(forecast_oid: str,
+                                       start_time: datetime,
+                                       end_time: datetime,
+                                       bounding_polygon: Polygon,
+                                       min_mag: float = -10) -> Catalog:
+
+    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
+
+    response = requests.get(
+        f'{get_config().WEBSERVICE_URL}/v2/forecasts/'
+        f'{forecast_oid}/seismicityobservation',
+        params={
+            'start_time': start_time,
+            'end_time': end_time,
+            'min_lon': min_lon,
+            'min_lat': min_lat,
+            'max_lon': max_lon,
+            'max_lat': max_lat,
+            'min_mag': min_mag,
+        }
+    )
+
+    return Catalog.from_quakeml(response.text)
+
+
+def get_forecastseries_event_counts(forecastseries_oid: str,
+                                    modelconfig_oid: str,
+                                    bounding_polygon: Polygon):
+    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
+
+    response = requests.get(
+        f'{get_config().WEBSERVICE_URL}/v2/forecastseries/'
+        f'{forecastseries_oid}/eventcounts',
+        params={
+            'modelconfig_oid': modelconfig_oid,
+            'min_lon': min_lon,
+            'min_lat': min_lat,
+            'max_lon': max_lon,
+            'max_lat': max_lat,
+        }
+    )
+
+    df = pd.read_csv(io.StringIO(response.text))
+
+    return df
