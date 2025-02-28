@@ -1,3 +1,4 @@
+
 from datetime import datetime
 
 import cmcrameri.cm as cmc
@@ -11,6 +12,7 @@ from matplotlib import colors
 from scipy.ndimage import zoom
 from seismostats.plots.basics import dot_size
 from shapely import Polygon
+from streamlit_js_eval import streamlit_js_eval
 
 from app.plots.colorscales import lajolla_r
 
@@ -162,7 +164,18 @@ def plot_rel_map_plotly(ratio: np.ndarray,
                      mode='grid-constant')
 
     x = np.arange(min_lon, max_lon, (max_lon - min_lon) / log_ratio.shape[1])
-    y = np.arange(min_lat, max_lat, (max_lat - min_lat) / log_ratio.shape[0])
+    y = np.arange(min_lat, max_lat, (max_lat
+                                     - min_lat) / log_ratio.shape[0])
+
+    cbar_ticks = np.arange(norm_min, norm_max, 0.5)
+    cbar_labels = [r'{}x'.format(np.format_float_positional(
+        10**i, trim='-', precision=0)) for i in cbar_ticks]
+    if cbar_ticks[0] > 0:
+        cbar_labels[0] = '1-' + cbar_labels[0]
+    cbar_labels[-1] = '≥' + cbar_labels[-1]
+
+    cbar_title = 'Probability increase to a normal day<br>' \
+        f'of at least one M≥{m_thresh:.1f} event in 7 days'
 
     # Create figure
     fig = go.Figure(
@@ -173,9 +186,22 @@ def plot_rel_map_plotly(ratio: np.ndarray,
             colorscale=lajolla_r,
             zmin=norm_min,
             zmax=norm_max,
-            showscale=False
-        )
-    )
+            showscale=True,
+            colorbar=dict(
+                title=cbar_title,
+                title_side='bottom',
+                tickvals=cbar_ticks,
+                ticktext=cbar_labels,
+                tickmode='array',
+                ticks="outside",
+                xpad=0,
+                x=0.5,
+                yanchor='bottom',
+                y=-0.2,
+                orientation='h',
+                thickness=20,
+            )
+        ))
 
     # border of Switzerland
     shpfilename = shapereader.natural_earth('10m',
@@ -188,7 +214,7 @@ def plot_rel_map_plotly(ratio: np.ndarray,
     # Add Switzerland border overlay
     fig.add_trace(go.Scatter(
         x=list(border_x),
-        y=list(border_y),
+        y=np.array(border_y),
         mode="lines",
         showlegend=False,
         line=dict(color="black", width=1.5)
@@ -205,7 +231,6 @@ def plot_rel_map_plotly(ratio: np.ndarray,
         y=bbox_y + clip_y[::-1],
         fill="toself",
         mode="none",
-        # line=dict(color="black", width=1),
         fillcolor="rgba(255,255,255,1)",
         showlegend=False,
     ))
@@ -227,23 +252,29 @@ def plot_rel_map_plotly(ratio: np.ndarray,
         )
     ))
 
+    width = streamlit_js_eval(js_expressions="window.innerWidth", key='SCR')
+    width = width or 800
     # Layout adjustments
     fig.update_layout(
         autosize=True,
+        height=1 / 1.4 * width + 80,
         # dragmode="select",  # Allows box/lasso selection
         xaxis=dict(range=[min_lon, max_lon],
                    showticklabels=False,  # Hide x-axis labels
                    showgrid=False,  # Remove grid
-                   zeroline=False  # Hide x-axis line
+                   zeroline=False,  # Hide x-axis line
+                   domain=[0, 1]  # Full width
                    ),
+
         yaxis=dict(range=[min_lat, max_lat],
                    scaleanchor="x",
                    scaleratio=1.4,
                    showticklabels=False,  # Hide x-axis labels
                    showgrid=False,  # Remove grid
-                   zeroline=False  # Hide x-axis line
+                   zeroline=False,  # Hide x-axis line
+                   domain=[0, 1]  # Full height
                    ),
-        margin=dict(l=0, r=0, t=0, b=0),
+        margin=dict(l=0, r=0, t=0, b=100)
     )
 
     return fig
