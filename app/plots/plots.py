@@ -1,9 +1,11 @@
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import cmcrameri.cm as cmc
 import geopandas
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -200,6 +202,7 @@ def plot_rel_map_plotly(ratio: np.ndarray,
                 y=-0.2,
                 orientation='h',
                 thickness=20,
+                len=0.5,
             )
         ))
 
@@ -276,5 +279,87 @@ def plot_rel_map_plotly(ratio: np.ndarray,
                    ),
         margin=dict(l=0, r=0, t=0, b=100)
     )
+
+    return fig
+
+
+def prob_and_mag_plot(times: pd.Series,
+                      probabilities: pd.Series,
+                      catalog: pd.DataFrame,
+                      current_time: datetime,
+                      avg_p: float,
+                      min_mag: float) -> plt.Figure:
+
+    current_prob = probabilities[times[times == current_time].index].values[0]
+
+    fig, [ax0, ax1] = plt.subplots(figsize=(12, 5),
+                                   nrows=2,
+                                   height_ratios=[1.0, 0.6],
+                                   sharex=True)
+    plt.subplots_adjust(hspace=0.0)
+
+    ax0.plot(
+        times,
+        probabilities,
+        color='k'
+    )
+
+    ax0.set_ylabel(
+        f"Probability of at least one M≥{min_mag:.1f} "
+        "\nevent in Switzerland in 7 days")
+
+    # make y axis percentages
+    ax0.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+    ylim = ax0.get_ylim()
+    xlim = ax0.get_xlim()
+
+    ax0.axhline(avg_p, color='k', linestyle='--')
+    ax0.text(xlim[0] + (xlim[1] - xlim[0]) * 0.1,
+             avg_p + (ylim[1] - ylim[0]) * 0.03,
+             'long-term avg: {:.1%}'.format(avg_p),
+             verticalalignment='bottom',
+             horizontalalignment='left',
+             fontsize=10,
+             backgroundcolor='white',
+             color='k')
+
+    if min_mag <= 3.5:
+        label_current = f"current {current_prob:.0%}"
+    elif min_mag <= 4.5:
+        label_current = f"current {current_prob:.1%}"
+    else:
+        label_current = f"current {current_prob:.2%}"
+
+    ax0.axvline(current_time, color='k')
+    ax0.text(mdates.date2num(current_time) + (xlim[1] - xlim[0]) * 0.005,
+             ylim[1] - (ylim[1] - ylim[0]) * 0.05,
+             label_current,
+             rotation=90,
+             verticalalignment='top',
+             horizontalalignment='left',
+             fontsize=10,
+             color='k')
+
+    dot_sizes = dot_size([*catalog['magnitude'], 7.5],
+                         smallest=10, largest=2600, interpolation_power=3)[:-1]
+
+    ax1.scatter(
+        catalog['time'],
+        catalog['magnitude'],
+        color='none', edgecolor='k', marker='o',
+        s=dot_sizes,
+        linewidth=0.5
+    )
+    for evt in catalog.itertuples():
+        ax1.plot([evt.time, evt.time], [0, evt.magnitude], color='k', lw=0.5)
+
+    ax1.set_ylabel("Magnitude")
+    max_mag = catalog['magnitude'].max()
+    ax1.set_ylim([2 - 0.2, max_mag + 0.5])
+    ax1.grid(axis='y', color='k', alpha=0.1)
+
+    ax1.set_xlim([times.min() - timedelta(days=1),
+                  times.max() + timedelta(days=1)])
+    ax1.axvline(current_time, color='k')
 
     return fig
