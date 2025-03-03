@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from shapely import wkt
+from shapely.geometry import box
 
 from app.client import (get_event_counts, get_forecast, get_forecast_cat,
                         get_forecast_seismicityobservation, get_forecasts,
@@ -34,6 +35,8 @@ min_mag_stored = 2.5  # m_thresh in model config!!!!
 
 forecasts = get_forecasts(st.session_state['forecastseries']['oid'])
 forecasts = [f for f in forecasts if f['status'] == 'COMPLETED']
+if "selection" not in st.session_state:
+    st.session_state.selection = None
 
 forecast = st.select_slider(
     "Select a forecast",
@@ -58,6 +61,7 @@ if modelrun is None:
 
 bounding_polygon = wkt.loads(
     st.session_state['forecastseries']['bounding_polygon'])
+bounding_polygon = st.session_state.selection or bounding_polygon
 
 observation_cat = get_forecast_seismicityobservation(
     forecast['oid'],
@@ -87,18 +91,35 @@ ratio = get_event_counts(modelrun['oid'], bounding_polygon, n_simulations)
 
 # st.pyplot(my_plot)
 
-
+selection = None
+bounding_polygon = selection or bounding_polygon
 plotly_map = plot_rel_map_plotly(ratio,
                                  observation_cat,
                                  forecast_mag_threshold,
                                  bounding_polygon,
                                  starttime)
 
+
+def selection_callback():
+    if mymap.selection and 'box' in mymap.selection and len(mymap.selection['box']) > 0:
+        selected_box = mymap.selection['box'][0]
+
+        # Ensure correct order: (minx, miny, maxx, maxy)
+        minx, maxx = sorted([selected_box['x'][0], selected_box['x'][1]])
+        miny, maxy = sorted([selected_box['y'][0], selected_box['y'][1]])
+
+        # Update selection and bounding polygon
+        st.session_state.selection = box(minx, miny, maxx, maxy)
+    else:
+        st.session_state.selection = None
+
+
 mymap = st.plotly_chart(plotly_map,
                         key="1",
-                        on_select="rerun",
+                        on_select=selection_callback,
                         use_container_width=True,
                         selection_mode="box")
+
 
 eventcounts = get_forecastseries_event_counts(
     st.session_state['forecastseries']['oid'],
@@ -148,6 +169,3 @@ fig2 = prob_and_mag_plot(forecast_dfs['starttime'],
                          0.2715,
                          forecast_mag_threshold)
 st.pyplot(fig2)
-
-
-st.write(mymap.selection)
