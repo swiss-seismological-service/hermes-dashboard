@@ -2,7 +2,6 @@
 import io
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
@@ -59,7 +58,7 @@ def get_forecast_cat(modelrun_oid: str) -> ForecastCatalog:
     return forecast_cat
 
 
-def get_event_counts(modelrun_oid: str, geometry: Polygon, n_simulations):
+def get_event_count_grid(modelrun_oid: str, geometry: Polygon, n_simulations):
     min_lat, min_lon, max_lat, max_lon = geometry.bounds
     bin = 0.05  # approximate bin size
     res_lon = (max_lon - min_lon) / (round((max_lon - min_lon) / bin))
@@ -81,14 +80,9 @@ def get_event_counts(modelrun_oid: str, geometry: Polygon, n_simulations):
 
     matrix_df = df.pivot(index="grid_lat",
                          columns="grid_lon",
-                         values="point_count").fillna(0)
+                         values="event_count").fillna(0)
 
-    longterm_bg_weekly_cell_p = 0.0001
-
-    ratio = ((1 - np.exp(-matrix_df.values / n_simulations))
-             / longterm_bg_weekly_cell_p)
-
-    return np.clip(ratio, a_min=1, a_max=None)
+    return matrix_df
 
 
 def get_forecast_seismicityobservation(forecast_oid: str,
@@ -134,5 +128,8 @@ def get_forecastseries_event_counts(forecastseries_oid: str,
     )
 
     df = pd.read_csv(io.StringIO(response.text))
+    df = df.drop(columns=['modelrun_oid'])
+    df = df.rename(columns={'forecast_oid': 'oid'})
+    df['starttime'] = pd.to_datetime(df['starttime'])
 
     return df

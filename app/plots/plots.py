@@ -290,7 +290,8 @@ def prob_and_mag_plot(times: pd.Series,
                       avg_p: float,
                       min_mag: float) -> plt.Figure:
 
-    current_prob = probabilities[times[times == current_time].index].values[0]
+    current_prob = 100 * \
+        probabilities[times[times == current_time].index].values[0]
 
     fig, [ax0, ax1] = plt.subplots(figsize=(12, 5),
                                    nrows=2,
@@ -300,7 +301,7 @@ def prob_and_mag_plot(times: pd.Series,
 
     ax0.plot(
         times,
-        probabilities,
+        probabilities * 100,
         color='k'
     )
 
@@ -332,7 +333,7 @@ def prob_and_mag_plot(times: pd.Series,
 
     ax0.axvline(current_time, color='k')
     ax0.text(mdates.date2num(current_time) + (xlim[1] - xlim[0]) * 0.005,
-             ylim[1] - (ylim[1] - ylim[0]) * 0.05,
+             max(ylim[1] - (ylim[1] - ylim[0]) * 0.05, 0.18),
              label_current,
              rotation=90,
              verticalalignment='top',
@@ -340,8 +341,12 @@ def prob_and_mag_plot(times: pd.Series,
              fontsize=10,
              color='k')
 
-    dot_sizes = dot_size([*catalog['magnitude'], 7.5],
-                         smallest=10, largest=2600, interpolation_power=3)[:-1]
+    dot_sizes = []
+    if not catalog.empty:
+        dot_sizes = dot_size([*catalog['magnitude'], 7.5],
+                             smallest=10,
+                             largest=2600,
+                             interpolation_power=3)[:-1]
 
     ax1.scatter(
         catalog['time'],
@@ -355,6 +360,8 @@ def prob_and_mag_plot(times: pd.Series,
 
     ax1.set_ylabel("Magnitude")
     max_mag = catalog['magnitude'].max()
+    if np.isnan(max_mag):
+        max_mag = 5
     ax1.set_ylim([2 - 0.2, max_mag + 0.5])
     ax1.grid(axis='y', color='k', alpha=0.1)
 

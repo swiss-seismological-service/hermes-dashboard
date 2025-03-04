@@ -71,8 +71,17 @@ with st.sidebar.container():
                                 label_visibility='collapsed'
                                 )
     selected_index = mc_names.index(selectbox_mc)
-    st.session_state['model_config'] = \
+    selected_model_config = \
         st.session_state['forecastseries']['modelconfigs'][selected_index]
+
+    response = requests.get(
+        f'http://localhost:8000/v2/modelconfigs/'
+        f'{selected_model_config["oid"]}')
+
+    st.session_state['model_config'] = response.json()
+
+    # st.session_state['model_conig'] = \
+    #     st.session_state['forecafstseries']['modelconfigs'][selected_index]
 
     st.divider()
 
