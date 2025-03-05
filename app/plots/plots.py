@@ -41,7 +41,7 @@ def plot_rel_map(ratio: np.ndarray,
         starttime.strftime('%d.%m.%Y %H:%M')))
 
     # plot forecast values
-    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
+    min_lon, min_lat, max_lon, max_lat = bounding_polygon.bounds
     im = ax.imshow(
         np.log10(ratio),
         origin='lower',
@@ -155,7 +155,7 @@ def plot_rel_map_plotly(ratio: np.ndarray,
     norm_min, norm_max = 0.5, 3.1
 
     # extent
-    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
+    min_lon, min_lat, max_lon, max_lat = bounding_polygon.bounds
 
     # Upsample the data to 100x100 for a smoother appearance
     high_res_factor = 10
@@ -224,14 +224,13 @@ def plot_rel_map_plotly(ratio: np.ndarray,
     ))
 
     # Define a bounding box to act as background
-    clip_x, clip_y = list(bounding_polygon.exterior.xy[1]), list(
-        bounding_polygon.exterior.xy[0])
+    clip_x, clip_y = bounding_polygon.exterior.xy
     bbox_x = [min_lon, max_lon, max_lon, min_lon, min_lon]
     bbox_y = [min_lat, min_lat, max_lat, max_lat, min_lat]
 
     fig.add_trace(go.Scatter(
-        x=bbox_x + clip_x[::-1],
-        y=bbox_y + clip_y[::-1],
+        x=bbox_x + list(clip_x[::-1]),
+        y=bbox_y + list(clip_y[::-1]),
         fill="toself",
         mode="none",
         fillcolor="rgba(255,255,255,1)",
@@ -282,7 +281,6 @@ def plot_rel_map_plotly(ratio: np.ndarray,
         margin=dict(l=0, r=0, t=0, b=100)
     )
 
-    fig.layout.annotation
     return fig
 
 

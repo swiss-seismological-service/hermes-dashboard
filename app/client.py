@@ -59,7 +59,7 @@ def get_forecast_cat(modelrun_oid: str) -> ForecastCatalog:
 
 
 def get_event_count_grid(modelrun_oid: str, geometry: Polygon, n_simulations):
-    min_lat, min_lon, max_lat, max_lon = geometry.bounds
+    min_lon, min_lat, max_lon, max_lat = geometry.bounds
     bin = 0.05  # approximate bin size
     res_lon = (max_lon - min_lon) / (round((max_lon - min_lon) / bin))
     res_lat = (max_lat - min_lat) / (round((max_lat - min_lat) / bin))
@@ -91,7 +91,7 @@ def get_forecast_seismicityobservation(forecast_oid: str,
                                        bounding_polygon: Polygon,
                                        min_mag: float = -10) -> Catalog:
 
-    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
+    min_lon, min_lat, max_lon, max_lat = bounding_polygon.bounds
 
     response = requests.get(
         f'{get_config().WEBSERVICE_URL}/v2/forecasts/'
@@ -113,7 +113,7 @@ def get_forecast_seismicityobservation(forecast_oid: str,
 def get_forecastseries_event_counts(forecastseries_oid: str,
                                     modelconfig_oid: str,
                                     bounding_polygon: Polygon):
-    min_lat, min_lon, max_lat, max_lon = bounding_polygon.bounds
+    min_lon, min_lat, max_lon, max_lat = bounding_polygon.bounds
 
     response = requests.get(
         f'{get_config().WEBSERVICE_URL}/v2/forecastseries/'
