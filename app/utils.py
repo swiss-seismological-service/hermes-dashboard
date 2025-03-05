@@ -22,3 +22,7 @@ def selection_callback(component: str):
         st.session_state.selection = box(minx, miny, maxx, maxy)
     else:
         st.session_state.selection = None
+
+
+def constrain_selection():
+    pass

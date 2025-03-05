@@ -149,7 +149,7 @@ def plot_rel_map_plotly(ratio: np.ndarray,
                         scatter_catalog: pd.DataFrame,
                         m_thresh: float,
                         bounding_polygon: Polygon,
-                        starttime):
+                        selection_polygon: Polygon) -> go.Figure:
 
     log_ratio = np.log10(ratio)
     norm_min, norm_max = 0.5, 3.1
@@ -261,7 +261,9 @@ def plot_rel_map_plotly(ratio: np.ndarray,
     fig.update_layout(
         autosize=True,
         height=1 / 1.4 * width + 80,
-        # dragmode="select",  # Allows box/lasso selection
+        modebar_remove=["pan2d", "lasso2d", "resetScale2d", "fullscreen",
+                        "zoomIn2d", "zoomOut2d", "toimage"],
+        dragmode='select',
         xaxis=dict(range=[min_lon, max_lon],
                    showticklabels=False,  # Hide x-axis labels
                    showgrid=False,  # Remove grid
@@ -280,6 +282,7 @@ def plot_rel_map_plotly(ratio: np.ndarray,
         margin=dict(l=0, r=0, t=0, b=100)
     )
 
+    fig.layout.annotation
     return fig
 
 

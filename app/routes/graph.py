@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
 from functools import partial
+from re import S
 
 import numpy as np
 import streamlit as st
-from shapely import wkt
+from plotly.graph_objs.layout import Selection
+from shapely import box, wkt
 
 from app.analysis import p_event_extrapolate, p_event_ratio_grid
 from app.client import (get_event_count_grid, get_forecast, get_forecast_cat,
@@ -15,6 +17,37 @@ from app.utils import selection_callback
 # General setup from sidebar selection ****************************************
 if 'selection' not in st.session_state:
     st.session_state.selection = None
+
+if 'plotly_map' not in st.session_state:
+    st.session_state.plotly_map = None
+
+if st.session_state.plotly_map is not None and \
+        st.session_state.selection is not None:
+    min_lat, min_lon, max_lat, max_lon = st.session_state.selection.bounds
+
+    # Compute current width, height, and area
+    width = max_lon - min_lon
+    height = max_lat - min_lat
+    area = width * height
+
+    # If the area is already ≥ 1, return as is
+    if area < 1:
+        # Scaling factor to make the area exactly 1 while maintaining aspect ratio
+        scale_factor = (1 / area) ** 0.5  # Square root to maintain proportions
+
+        # Compute new width and height
+        new_width = width * scale_factor
+        new_height = height * scale_factor
+
+        # Keep min_lat, min_lon fixed and adjust max_lat, max_lon
+        new_max_lat = min_lat + new_height
+        new_max_lon = min_lon + new_width
+
+        st.session_state.plotly_map.layout.selections = tuple()
+        st.session_state.plotly_map.add_selection(
+            x0=min_lon, y0=min_lat, x1=new_max_lon, y1=new_max_lat)
+
+        # ... continue from here
 
 forecast_mag_threshold = 5.0
 n_simulations = \
@@ -66,18 +99,19 @@ count_grid = get_event_count_grid(current_modelrun['oid'],
 
 ratio = p_event_ratio_grid(count_grid, n_simulations, 0.0001)
 
-plotly_map = plot_rel_map_plotly(ratio,
-                                 observation_catalog,
-                                 forecast_mag_threshold,
-                                 selection_polygon,
-                                 current_time)
+if st.session_state['plotly_map'] is None:
+    st.session_state['plotly_map'] = \
+        plot_rel_map_plotly(ratio,
+                            observation_catalog,
+                            forecast_mag_threshold,
+                            bounding_polygon,
+                            selection_polygon)
 
-st.plotly_chart(plotly_map,
+st.plotly_chart(st.session_state.plotly_map,
                 key='mymap',
                 on_select=partial(selection_callback, 'mymap'),
                 use_container_width=True,
-                selection_mode='box')
-
+                )
 
 # Plot the probability timeseries and the event count timeseries. *************
 full_observation_catalog = get_forecast_seismicityobservation(
@@ -107,5 +141,4 @@ else:
                              current_time,
                              0.2715,
                              forecast_mag_threshold)
-
     st.pyplot(fig2)
