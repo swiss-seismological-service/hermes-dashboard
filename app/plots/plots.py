@@ -176,8 +176,8 @@ def plot_rel_map_plotly(ratio: np.ndarray,
         cbar_labels[0] = '1-' + cbar_labels[0]
     cbar_labels[-1] = '≥' + cbar_labels[-1]
 
-    cbar_title = 'Probability increase to a normal day<br>' \
-        f'of at least one M≥{m_thresh:.1f} event in 7 days'
+    # cbar_title = 'Probability increase to a normal day<br>' \
+    #     f'of at least one M≥{m_thresh:.1f} event in 7 days'
 
     # Create figure
     fig = go.Figure(
@@ -190,8 +190,8 @@ def plot_rel_map_plotly(ratio: np.ndarray,
             zmax=norm_max,
             showscale=True,
             colorbar=dict(
-                title=cbar_title,
-                title_side='bottom',
+                # title=cbar_title,
+                # title_side='bottom',
                 tickvals=cbar_ticks,
                 ticktext=cbar_labels,
                 tickmode='array',
@@ -199,12 +199,26 @@ def plot_rel_map_plotly(ratio: np.ndarray,
                 xpad=0,
                 x=0.5,
                 yanchor='bottom',
-                y=-0.2,
+                y=-0.05,
                 orientation='h',
                 thickness=20,
                 len=0.5,
             )
         ))
+
+    # Define a bounding box to act as background
+    clip_x, clip_y = selection_polygon.exterior.xy
+    bbox_x = [min_lon, max_lon, max_lon, min_lon, min_lon]
+    bbox_y = [min_lat, min_lat, max_lat, max_lat, min_lat]
+
+    fig.add_trace(go.Scatter(
+        x=bbox_x + list(clip_x[::-1]),
+        y=bbox_y + list(clip_y[::-1]),
+        fill="toself",
+        mode="none",
+        fillcolor="rgba(255,255,255,1)",
+        showlegend=False,
+    ))
 
     # border of Switzerland
     shpfilename = shapereader.natural_earth('10m',
@@ -221,20 +235,6 @@ def plot_rel_map_plotly(ratio: np.ndarray,
         mode="lines",
         showlegend=False,
         line=dict(color="black", width=1.5)
-    ))
-
-    # Define a bounding box to act as background
-    clip_x, clip_y = bounding_polygon.exterior.xy
-    bbox_x = [min_lon, max_lon, max_lon, min_lon, min_lon]
-    bbox_y = [min_lat, min_lat, max_lat, max_lat, min_lat]
-
-    fig.add_trace(go.Scatter(
-        x=bbox_x + list(clip_x[::-1]),
-        y=bbox_y + list(clip_y[::-1]),
-        fill="toself",
-        mode="none",
-        fillcolor="rgba(255,255,255,1)",
-        showlegend=False,
     ))
 
     # plot observed events
@@ -256,6 +256,7 @@ def plot_rel_map_plotly(ratio: np.ndarray,
 
     width = streamlit_js_eval(js_expressions="window.innerWidth", key='SCR')
     width = width or 800
+
     # Layout adjustments
     fig.update_layout(
         autosize=True,
@@ -278,7 +279,7 @@ def plot_rel_map_plotly(ratio: np.ndarray,
                    zeroline=False,  # Hide x-axis line
                    domain=[0, 1]  # Full height
                    ),
-        margin=dict(l=0, r=0, t=0, b=100)
+        margin=dict(l=0, r=0, t=0, b=50)
     )
 
     return fig

@@ -76,13 +76,19 @@ p_map = plot_rel_map_plotly(ratio,
                             forecast_mag_threshold,
                             bounding_polygon,
                             selection_polygon)
-
+st.markdown(
+    f'''
+    #### Probability increase of at least one \
+    M≥{forecast_mag_threshold:.1f} event in the next 7 days \
+    on the _{current_time.strftime('%Y-%m-%d')}_.
+    ''')
 if st.session_state.selection is not None:
     # Update the selection
     min_lon, min_lat, max_lon, max_lat = st.session_state.selection.bounds
     p_map.layout.selections = tuple()
     p_map.add_selection(
         x0=min_lon, y0=min_lat, x1=max_lon, y1=max_lat)
+    st.info('Double click on the map to clear selection.')
 
 st.plotly_chart(p_map,
                 key='p_map_selection',
