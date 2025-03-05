@@ -1,3 +1,6 @@
+import streamlit as st
+import geopandas
+from cartopy.io import shapereader
 from shapely import Polygon, box
 
 
@@ -39,3 +42,12 @@ def calculate_selection_polygon(selection: dict,
 
         return box(min_lon, min_lat, max_lon, max_lat)
     return None
+
+
+@st.cache_data
+def get_border_polygon(name: str):
+    shpfilename = shapereader.natural_earth('10m',
+                                            'cultural',
+                                            'admin_0_countries')
+    df = geopandas.read_file(shpfilename)
+    return df.loc[df['ADMIN'] == name]['geometry'].values[0]

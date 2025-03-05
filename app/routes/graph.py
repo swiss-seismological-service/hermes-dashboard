@@ -3,15 +3,29 @@ from datetime import datetime, timedelta
 import numpy as np
 import streamlit as st
 from shapely import wkt
+from streamlit_js_eval import streamlit_js_eval
 
 from app.analysis import p_event_extrapolate, p_event_ratio_grid
 from app.client import (get_event_count_grid, get_forecast, get_forecast_cat,
                         get_forecast_seismicityobservation, get_forecasts,
                         get_forecastseries_event_counts)
 from app.plots.plots import plot_rel_map_plotly, prob_and_mag_plot
-from app.utils import calculate_selection_polygon
+from app.utils import calculate_selection_polygon, get_border_polygon
 
-# General setup from sidebar selection ****************************************
+# Session State Management ***************************************************
+if 'p_map' not in st.session_state:
+    st.session_state.p_map = None
+else:
+    st.session_state.p_map = st.session_state.p_map
+
+if 'selection' not in st.session_state:
+    st.session_state.selection = None
+else:
+    st.session_state.selection = st.session_state.selection
+
+st.session_state.width = streamlit_js_eval(
+    js_expressions="window.innerWidth", key='SCR')
+
 if 'p_map_selection' in st.session_state:
     # Check the size of the selection and create a polygon from it
     st.session_state.selection = calculate_selection_polygon(
@@ -19,6 +33,7 @@ if 'p_map_selection' in st.session_state:
 else:
     st.session_state.selection = None
 
+# General setup from sidebar selection ****************************************
 forecast_mag_threshold = 5.0
 
 n_simulations = \
@@ -70,31 +85,35 @@ count_grid = get_event_count_grid(current_modelrun['oid'],
 
 ratio = p_event_ratio_grid(count_grid, n_simulations, 0.0001)
 
+border_polygon = get_border_polygon('Switzerland')
 
-p_map = plot_rel_map_plotly(ratio,
-                            observation_catalog,
-                            forecast_mag_threshold,
-                            bounding_polygon,
-                            selection_polygon)
+st.session_state.p_map = plot_rel_map_plotly(ratio,
+                                             observation_catalog,
+                                             bounding_polygon,
+                                             selection_polygon,
+                                             border_polygon,
+                                             st.session_state.width)
+
 st.markdown(
     f'''
     #### Probability increase of at least one \
     M≥{forecast_mag_threshold:.1f} event in the next 7 days \
     on the _{current_time.strftime('%Y-%m-%d')}_.
     ''')
+
 if st.session_state.selection is not None:
     # Update the selection
     min_lon, min_lat, max_lon, max_lat = st.session_state.selection.bounds
-    p_map.layout.selections = tuple()
-    p_map.add_selection(
+    st.session_state.p_map.layout.selections = tuple()
+    st.session_state.p_map.add_selection(
         x0=min_lon, y0=min_lat, x1=max_lon, y1=max_lat)
     st.info('Double click on the map to clear selection.')
 
-st.plotly_chart(p_map,
+
+st.plotly_chart(st.session_state.p_map,
                 key='p_map_selection',
                 on_select='rerun',
                 use_container_width=True)
-
 
 # Plot the probability timeseries and the event count timeseries. *************
 full_observation_catalog = get_forecast_seismicityobservation(

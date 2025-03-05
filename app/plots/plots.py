@@ -14,7 +14,6 @@ from matplotlib import colors
 from scipy.ndimage import zoom
 from seismostats.plots.basics import dot_size
 from shapely import Polygon
-from streamlit_js_eval import streamlit_js_eval
 
 from app.plots.colorscales import lajolla_r
 
@@ -147,9 +146,10 @@ def create_line_plot(data,
 
 def plot_rel_map_plotly(ratio: np.ndarray,
                         scatter_catalog: pd.DataFrame,
-                        m_thresh: float,
                         bounding_polygon: Polygon,
-                        selection_polygon: Polygon) -> go.Figure:
+                        selection_polygon: Polygon,
+                        border_polygon: Polygon,
+                        width: float = 800) -> go.Figure:
 
     log_ratio = np.log10(ratio)
     norm_min, norm_max = 0.5, 3.1
@@ -221,12 +221,7 @@ def plot_rel_map_plotly(ratio: np.ndarray,
     ))
 
     # border of Switzerland
-    shpfilename = shapereader.natural_earth('10m',
-                                            'cultural',
-                                            'admin_0_countries')
-    df = geopandas.read_file(shpfilename)
-    poly = df.loc[df['ADMIN'] == 'Switzerland']['geometry'].values[0]
-    border_x, border_y = poly.exterior.xy
+    border_x, border_y = border_polygon.exterior.xy
 
     # Add Switzerland border overlay
     fig.add_trace(go.Scatter(
@@ -254,11 +249,10 @@ def plot_rel_map_plotly(ratio: np.ndarray,
         )
     ))
 
-    width = streamlit_js_eval(js_expressions="window.innerWidth", key='SCR')
     width = width or 800
-
     # Layout adjustments
     fig.update_layout(
+        uirevision='true',
         autosize=True,
         height=1 / 1.4 * width + 80,
         modebar_remove=["pan2d", "lasso2d", "resetScale2d", "fullscreen",
