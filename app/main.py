@@ -10,13 +10,13 @@ st.set_page_config(
 
 if 'project' not in st.session_state:
     response = requests.get(
-        f'http://localhost:8000/v1/projects/{get_config().PROJECT_ID}')
+        f'{get_config().WEBSERVICE_URL}/v1/projects/{get_config().PROJECT_ID}')
     project = response.json()
     st.session_state['project'] = project
 
 if 'forecastseries_list' not in st.session_state:
     response = requests.get(
-        'http://localhost:8000/v1/projects/'
+        f'{get_config().WEBSERVICE_URL}/v1/projects/'
         f'{get_config().PROJECT_ID}/forecastseries')
     forecastseries = response.json()
     st.session_state['forecastseries_list'] = forecastseries
@@ -75,13 +75,10 @@ with st.sidebar.container():
         st.session_state['forecastseries']['modelconfigs'][selected_index]
 
     response = requests.get(
-        f'http://localhost:8000/v2/modelconfigs/'
+        f'{get_config().WEBSERVICE_URL}/v2/modelconfigs/'
         f'{selected_model_config["oid"]}')
 
     st.session_state['model_config'] = response.json()
-
-    # st.session_state['model_conig'] = \
-    #     st.session_state['forecafstseries']['modelconfigs'][selected_index]
 
     st.divider()
 

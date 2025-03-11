@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 import requests
 import streamlit as st
-from seismostats import Catalog, ForecastCatalog
+from seismostats import Catalog
 from shapely import Polygon
 
 from app import get_config
@@ -43,19 +43,6 @@ def get_forecast(forecast_oid: str) -> dict:
         st.stop()
 
     return response.json()
-
-
-@st.cache_resource
-def get_forecast_cat(modelrun_oid: str) -> ForecastCatalog:
-    # get forecast data
-    response = requests.get(
-        f'{get_config().WEBSERVICE_URL}/v2/modelruns/{modelrun_oid}/result')
-    df = pd.read_csv(io.StringIO(response.text))
-    forecast_cat = ForecastCatalog(df)
-    forecast_cat['time'] = pd.to_datetime(forecast_cat['time'])
-    forecast_cat.rename(
-        columns={'realization_id': 'catalog_id', }, inplace=True)
-    return forecast_cat
 
 
 def get_event_count_grid(modelrun_oid: str, geometry: Polygon, n_simulations):

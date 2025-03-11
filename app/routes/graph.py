@@ -6,7 +6,7 @@ from shapely import wkt
 from streamlit_js_eval import streamlit_js_eval
 
 from app.analysis import p_event_extrapolate, p_event_ratio_grid
-from app.client import (get_event_count_grid, get_forecast, get_forecast_cat,
+from app.client import (get_event_count_grid, get_forecast,
                         get_forecast_seismicityobservation, get_forecasts,
                         get_forecastseries_event_counts)
 from app.plots.plots import plot_rel_map_plotly, prob_and_mag_plot
@@ -46,14 +46,19 @@ selection_polygon = st.session_state.selection or bounding_polygon
 
 forecasts = get_forecasts(st.session_state.forecastseries['oid'])
 forecasts = [f for f in forecasts if f['status'] == 'COMPLETED']
-
+if len(forecasts) == 0:
+    st.error('No completed forecasts found.')
+    st.stop()
+if len(forecasts) == 1:
+    forecasts = forecasts * 2
 
 # Select forecast to display and gather required data.*************************
 forecast_slider = st.select_slider(
     'Select a forecast',
     options=forecasts,
     value=forecasts[0],
-    format_func=lambda x: x['starttime']
+    format_func=lambda x: x['starttime'],
+    key='forecast_slider'
 )
 
 current_forecast = get_forecast(forecast_slider['oid'])
@@ -76,7 +81,6 @@ observation_catalog = get_forecast_seismicityobservation(
     current_time,
     bounding_polygon,
     min_mag=min_mag_stored)
-forecast_catalog = get_forecast_cat(current_modelrun['oid'])
 
 
 count_grid = get_event_count_grid(current_modelrun['oid'],
@@ -136,6 +140,11 @@ p_event_series = p_event_extrapolate(eventcounts,
 if p_event_series.empty:
     st.error('No event counts found for the selected forecast or selection.')
     st.stop()
+elif len(p_event_series) == 1:
+    st.info('Only one forecast found for the selected '
+            'forecastseries:  \nProbability of at '
+            f'least one M≥{forecast_mag_threshold:.1f} event: '
+            f'**{p_event_series["p_event"].values[0] * 100:.2f}%**')
 else:
     fig2 = prob_and_mag_plot(p_event_series['starttime'],
                              p_event_series['p_event'],
