@@ -21,20 +21,22 @@ if 'forecastseries_list' not in st.session_state:
     forecastseries = response.json()
     st.session_state['forecastseries_list'] = forecastseries
 
-home = st.Page(page='routes/home.py',
-               title='Dashboard',
-               default=True)
+# home = st.Page(page='routes/home.py',
+#                title='Dashboard',
+#                default=True)
 
 # subpage = st.Page(page='routes/sub.py',
 #                   title='Subpage')
 
 graph = st.Page(page='routes/graph.py',
-                title='Graph')
+                title='Graph',
+                default=True)
 
-pg = st.navigation([home,
-                    # subpage,
-                    graph
-                    ])
+pg = st.navigation([
+    # home,
+    # subpage,
+    graph
+])
 
 
 with st.sidebar.container():
