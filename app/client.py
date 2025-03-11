@@ -11,7 +11,6 @@ from shapely import Polygon
 from app import get_config
 
 
-@st.cache_data
 def get_forecasts(forecastseries_oid: str) -> list:
     response = requests.get(f'{get_config().WEBSERVICE_URL}'
                             '/v1/forecastseries/'
