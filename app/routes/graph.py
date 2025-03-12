@@ -146,10 +146,15 @@ elif len(p_event_series) == 1:
             f'least one M≥{forecast_mag_threshold:.1f} event: '
             f'**{p_event_series["p_event"].values[0] * 100:.2f}%**')
 else:
+    if st.session_state.selection is not None:
+        long_term = p_event_series['p_event'].mean() * 100
+        st.write(long_term)
+    else:
+        long_term = 0.2715
     fig2 = prob_and_mag_plot(p_event_series['starttime'],
                              p_event_series['p_event'],
                              full_observation_catalog,
                              current_time,
-                             0.2715,
+                             long_term,
                              forecast_mag_threshold)
     st.pyplot(fig2)

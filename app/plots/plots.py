@@ -329,7 +329,8 @@ def prob_and_mag_plot(times: pd.Series,
 
     ax0.axvline(current_time, color='k')
     ax0.text(mdates.date2num(current_time) + (xlim[1] - xlim[0]) * 0.005,
-             max(ylim[1] - (ylim[1] - ylim[0]) * 0.05, 0.18),
+             max(ylim[1] - (ylim[1] - ylim[0])
+                 * 0.05, (ylim[1] - ylim[0]) * 0.05),
              label_current,
              rotation=90,
              verticalalignment='top',
