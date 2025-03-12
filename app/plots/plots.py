@@ -283,11 +283,12 @@ def prob_and_mag_plot(times: pd.Series,
                       probabilities: pd.Series,
                       catalog: pd.DataFrame,
                       current_time: datetime,
-                      avg_p: float,
+                      avg_p: float | None,
                       min_mag: float) -> plt.Figure:
 
-    current_prob = 100 * \
-        probabilities[times[times == current_time].index].values[0]
+    probabilities = probabilities
+
+    current_prob = probabilities[times[times == current_time].index].values[0]
 
     fig, [ax0, ax1] = plt.subplots(figsize=(12, 5),
                                    nrows=2,
@@ -297,7 +298,7 @@ def prob_and_mag_plot(times: pd.Series,
 
     ax0.plot(
         times,
-        probabilities * 100,
+        probabilities,
         color='k'
     )
 
@@ -307,18 +308,27 @@ def prob_and_mag_plot(times: pd.Series,
 
     # make y axis percentages
     ax0.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
-    ylim = ax0.get_ylim()
-    xlim = ax0.get_xlim()
 
-    ax0.axhline(avg_p, color='k', linestyle='--')
-    ax0.text(xlim[0] + (xlim[1] - xlim[0]) * 0.1,
-             avg_p + (ylim[1] - ylim[0]) * 0.03,
-             'long-term avg: {:.1%}'.format(avg_p),
-             verticalalignment='bottom',
-             horizontalalignment='left',
-             fontsize=10,
-             backgroundcolor='white',
-             color='k')
+    if avg_p is not None:
+        ylim = ax0.get_ylim()
+        xlim = ax0.get_xlim()
+        yrange = ylim[1] - ylim[0]
+        xrange = xlim[1] - xlim[0]
+        if (mdates.date2num(current_time) - xlim[0]) > (xrange / 2):
+            lta_x_offset = xlim[0] + xrange * 0.1
+        else:
+            lta_x_offset = xlim[1] - xrange * 0.2
+        lta_y_offset = avg_p + yrange * 0.03
+
+        ax0.axhline(avg_p, color='k', linestyle='--')
+        ax0.text(lta_x_offset,
+                 lta_y_offset,
+                 'long-term avg: {:.2%}'.format(avg_p),
+                 verticalalignment='bottom',
+                 horizontalalignment='left',
+                 fontsize=10,
+                 backgroundcolor='white',
+                 color='k')
 
     if min_mag <= 3.5:
         label_current = f"current {current_prob:.0%}"
@@ -327,10 +337,20 @@ def prob_and_mag_plot(times: pd.Series,
     else:
         label_current = f"current {current_prob:.2%}"
 
+    ylim = ax0.get_ylim()
+    xlim = ax0.get_xlim()
+    yrange = ylim[1] - ylim[0]
+    xrange = xlim[1] - xlim[0]
+
+    current_x_offset = mdates.date2num(current_time) + xrange * 0.005
+    if (current_prob - ylim[0]) < (yrange / 2):
+        current_y_offset = ylim[1] - yrange * 0.05
+    else:
+        current_y_offset = current_prob - yrange * 0.05
+
     ax0.axvline(current_time, color='k')
-    ax0.text(mdates.date2num(current_time) + (xlim[1] - xlim[0]) * 0.005,
-             max(ylim[1] - (ylim[1] - ylim[0])
-                 * 0.05, (ylim[1] - ylim[0]) * 0.05),
+    ax0.text(current_x_offset,
+             current_y_offset,
              label_current,
              rotation=90,
              verticalalignment='top',

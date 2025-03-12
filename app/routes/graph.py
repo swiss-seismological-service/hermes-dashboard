@@ -34,7 +34,12 @@ else:
     st.session_state.selection = None
 
 # General setup from sidebar selection ****************************************
-forecast_mag_threshold = 5.0
+forecast_mag_threshold = 5
+longterm_average_weekly_p_2p5 = 0.2715
+longterm_average_weekly_p = 1 - \
+    np.exp(np.log(1 - longterm_average_weekly_p_2p5)
+           * np.exp((2.5 - forecast_mag_threshold) * np.log(10)))
+longterm_bg_weekly_cell_p = 0.0001
 
 n_simulations = \
     st.session_state.forecastseries['model_settings']['n_simulations']
@@ -86,7 +91,9 @@ observation_catalog = get_forecast_seismicityobservation(
 count_grid = get_event_count_grid(current_modelrun['oid'],
                                   bounding_polygon)
 
-ratio = p_event_ratio_grid(count_grid, n_simulations, 0.0001)
+ratio = p_event_ratio_grid(count_grid,
+                           n_simulations,
+                           longterm_bg_weekly_cell_p)
 
 border_polygon = get_border_polygon('Switzerland')
 
@@ -119,7 +126,6 @@ st.plotly_chart(st.session_state.p_map,
                 use_container_width=True)
 
 # Plot the probability timeseries and the event count timeseries. *************
-
 full_observation_catalog = get_forecast_seismicityobservation(
     max(forecasts, key=lambda x: x['starttime'])['oid'],
     min(forecasts, key=lambda x: x['starttime'])['starttime'],
@@ -134,7 +140,7 @@ eventcounts = get_forecastseries_event_counts(
 
 p_event_series = p_event_extrapolate(eventcounts,
                                      n_simulations,
-                                     2.5,
+                                     forecast_mag_threshold - min_mag_stored,
                                      np.log(10))
 
 if p_event_series.empty:
@@ -147,10 +153,9 @@ elif len(p_event_series) == 1:
             f'**{p_event_series["p_event"].values[0] * 100:.2f}%**')
 else:
     if st.session_state.selection is not None:
-        long_term = p_event_series['p_event'].mean() * 100
-        st.write(long_term)
+        long_term = None
     else:
-        long_term = 0.2715
+        long_term = longterm_average_weekly_p
     fig2 = prob_and_mag_plot(p_event_series['starttime'],
                              p_event_series['p_event'],
                              full_observation_catalog,
