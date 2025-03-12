@@ -1,5 +1,5 @@
-import streamlit as st
 import geopandas
+import streamlit as st
 from cartopy.io import shapereader
 from shapely import Polygon, box
 
@@ -51,3 +51,7 @@ def get_border_polygon(name: str):
                                             'admin_0_countries')
     df = geopandas.read_file(shpfilename)
     return df.loc[df['ADMIN'] == name]['geometry'].values[0]
+
+
+def hash_polygon(polygon: Polygon) -> str:
+    return polygon.wkt

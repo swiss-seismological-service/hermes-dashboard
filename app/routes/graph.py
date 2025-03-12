@@ -84,8 +84,7 @@ observation_catalog = get_forecast_seismicityobservation(
 
 
 count_grid = get_event_count_grid(current_modelrun['oid'],
-                                  bounding_polygon,
-                                  n_simulations)
+                                  bounding_polygon)
 
 ratio = p_event_ratio_grid(count_grid, n_simulations, 0.0001)
 
@@ -120,6 +119,7 @@ st.plotly_chart(st.session_state.p_map,
                 use_container_width=True)
 
 # Plot the probability timeseries and the event count timeseries. *************
+
 full_observation_catalog = get_forecast_seismicityobservation(
     max(forecasts, key=lambda x: x['starttime'])['oid'],
     min(forecasts, key=lambda x: x['starttime'])['starttime'],
@@ -134,7 +134,7 @@ eventcounts = get_forecastseries_event_counts(
 
 p_event_series = p_event_extrapolate(eventcounts,
                                      n_simulations,
-                                     forecast_mag_threshold - min_mag_stored,
+                                     2.5,
                                      np.log(10))
 
 if p_event_series.empty:

@@ -9,8 +9,10 @@ from seismostats import Catalog
 from shapely import Polygon
 
 from app import get_config
+from app.utils import hash_polygon
 
 
+@st.cache_data(ttl=300)
 def get_forecasts(forecastseries_oid: str) -> list:
     response = requests.get(f'{get_config().WEBSERVICE_URL}'
                             '/v1/forecastseries/'
@@ -29,7 +31,7 @@ def get_forecasts(forecastseries_oid: str) -> list:
     return response
 
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def get_forecast(forecast_oid: str) -> dict:
     response = requests.get(f'{get_config().WEBSERVICE_URL}'
                             '/v1/forecasts/'
@@ -44,7 +46,10 @@ def get_forecast(forecast_oid: str) -> dict:
     return response.json()
 
 
-def get_event_count_grid(modelrun_oid: str, geometry: Polygon, n_simulations):
+@st.cache_data(ttl=3600,
+               hash_funcs={Polygon: hash_polygon})
+def get_event_count_grid(modelrun_oid: str,
+                         geometry: Polygon):
     min_lon, min_lat, max_lon, max_lat = geometry.bounds
     bin = 0.05  # approximate bin size
     res_lon = (max_lon - min_lon) / (round((max_lon - min_lon) / bin))
@@ -71,6 +76,8 @@ def get_event_count_grid(modelrun_oid: str, geometry: Polygon, n_simulations):
     return matrix_df
 
 
+@st.cache_data(ttl=3600,
+               hash_funcs={Polygon: hash_polygon})
 def get_forecast_seismicityobservation(forecast_oid: str,
                                        start_time: datetime,
                                        end_time: datetime,
@@ -96,6 +103,8 @@ def get_forecast_seismicityobservation(forecast_oid: str,
     return Catalog.from_quakeml(response.text)
 
 
+@st.cache_data(ttl=300,
+               hash_funcs={Polygon: hash_polygon})
 def get_forecastseries_event_counts(forecastseries_oid: str,
                                     modelconfig_oid: str,
                                     bounding_polygon: Polygon):
@@ -113,9 +122,14 @@ def get_forecastseries_event_counts(forecastseries_oid: str,
         }
     )
 
+    forecasts = get_forecasts(forecastseries_oid)
+
+    fc_df = pd.DataFrame(forecasts)
+    fc_df = fc_df[['oid', 'starttime']]
+    fc_df['starttime'] = pd.to_datetime(fc_df['starttime'])
+
     df = pd.read_csv(io.StringIO(response.text))
-    df = df.drop(columns=['modelrun_oid'])
     df = df.rename(columns={'forecast_oid': 'oid'})
-    df['starttime'] = pd.to_datetime(df['starttime'])
+    df = df.merge(fc_df, on='oid', how='left')
 
     return df
