@@ -10,9 +10,11 @@ from app.client import (get_event_count_grid, get_forecast,
                         get_forecast_seismicityobservation, get_forecasts,
                         get_forecastseries_event_counts)
 from app.plots.plots import plot_rel_map_plotly, prob_and_mag_plot
-from app.utils import calculate_selection_polygon, get_border_polygon
+from app.utils import (calculate_selection_polygon, date_formatting,
+                       get_border_polygon)
 
 # Session State Management ***************************************************
+# Assigning states to itself to be sure they are not lost on reloads
 if 'p_map' not in st.session_state:
     st.session_state.p_map = None
 else:
@@ -38,7 +40,7 @@ forecast_mag_threshold = 5
 longterm_average_weekly_p_2p5 = 0.2715
 longterm_average_weekly_p = 1 - \
     np.exp(np.log(1 - longterm_average_weekly_p_2p5)
-           * np.exp((2.5 - forecast_mag_threshold) * np.log(10)))
+           * np.exp((2.5 - forecast_mag_threshold) * 0.97 * np.log(10)))
 longterm_bg_weekly_cell_p = 0.0001
 
 n_simulations = \
@@ -58,14 +60,15 @@ if len(forecasts) == 1:
     forecasts = forecasts * 2
 
 # Select forecast to display and gather required data.*************************
+st.markdown('#### Select a Forecast')
 forecast_slider = st.select_slider(
-    'Select a forecast',
+    ' ',
     options=forecasts,
-    value=forecasts[0],
-    format_func=lambda x: x['starttime'],
+    value=forecasts[-1],
+    format_func=lambda x: datetime.strptime(
+        x['starttime'], "%Y-%m-%dT%H:%M:%S").strftime("%Y/%m/%d"),
     key='forecast_slider'
 )
-
 current_forecast = get_forecast(forecast_slider['oid'])
 current_time = datetime.fromisoformat(current_forecast['starttime'])
 current_modelrun = next((mr for mr in current_forecast['modelruns']
@@ -108,7 +111,7 @@ st.markdown(
     f'''
     #### Probability increase of at least one \
     M≥{forecast_mag_threshold:.1f} event in the next 7 days \
-    on the _{current_time.strftime('%Y-%m-%d')}_.
+    starting on the :red[_{date_formatting(current_time)}_].
     ''')
 
 if st.session_state.selection is not None:
@@ -133,10 +136,11 @@ full_observation_catalog = get_forecast_seismicityobservation(
     selection_polygon,
     min_mag=2)
 
-eventcounts = get_forecastseries_event_counts(
-    st.session_state.forecastseries['oid'],
-    st.session_state.model_config['oid'],
-    selection_polygon)
+with st.spinner("Loading timeline...", show_time=False):
+    eventcounts = get_forecastseries_event_counts(
+        st.session_state.forecastseries['oid'],
+        st.session_state.model_config['oid'],
+        selection_polygon)
 
 p_event_series = p_event_extrapolate(eventcounts,
                                      n_simulations,
@@ -154,12 +158,17 @@ elif len(p_event_series) == 1:
 else:
     if st.session_state.selection is not None:
         long_term = None
+        ylabel = 'Probability of at least one M≥5.0 event' \
+            ' \nin the selected area in 7 days'
     else:
         long_term = longterm_average_weekly_p
+        ylabel = 'Probability of at least one M≥5.0 event ' \
+            '\nin Switzerland in 7 days'
     fig2 = prob_and_mag_plot(p_event_series['starttime'],
                              p_event_series['p_event'],
                              full_observation_catalog,
                              current_time,
                              long_term,
-                             forecast_mag_threshold)
+                             ylabel)
+
     st.pyplot(fig2)

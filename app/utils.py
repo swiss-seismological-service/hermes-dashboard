@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import geopandas
 import streamlit as st
 from cartopy.io import shapereader
@@ -55,3 +57,12 @@ def get_border_polygon(name: str):
 
 def hash_polygon(polygon: Polygon) -> str:
     return polygon.wkt
+
+
+def date_formatting(date: datetime) -> str:
+    if 4 <= date.day <= 20 or 24 <= date.day <= 30:
+        suffix = "th"
+    else:
+        suffix = ["st", "nd", "rd"][date.day % 10 - 1]
+
+    return date.strftime(f"%-d{suffix} of %B %Y")

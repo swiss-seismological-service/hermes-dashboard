@@ -1,147 +1,17 @@
 
 from datetime import datetime, timedelta
 
-import cmcrameri.cm as cmc
-import geopandas
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from cartopy.io import shapereader
-from matplotlib import colors
 from scipy.ndimage import zoom
 from seismostats.plots.basics import dot_size
 from shapely import Polygon
 
 from app.plots.colorscales import lajolla_r
-
-
-def plot_rel_map(ratio: np.ndarray,
-                 scatter_catalog: pd.DataFrame,
-                 m_thresh: float,
-                 bounding_polygon: Polygon,
-                 starttime: datetime) -> plt.Figure:
-
-    cmap = cmc.lajolla_r
-    cmap.set_under(cmap(0.0))
-    scatter_color = 'k'
-
-    # use logarithmic colorscale
-    fig, ax = plt.subplots(figsize=(10, 8), nrows=1)
-
-    # use discrete colormap with 5 colors
-    norm_min = 0.5
-    norm_max = 3.1
-    norm = colors.BoundaryNorm(np.arange(norm_min, norm_max, 0.02), cmap.N)
-
-    ax.set_title('Earthquake forecast for Switzerland on {}'.format(
-        starttime.strftime('%d.%m.%Y %H:%M')))
-
-    # plot forecast values
-    min_lon, min_lat, max_lon, max_lat = bounding_polygon.bounds
-    im = ax.imshow(
-        np.log10(ratio),
-        origin='lower',
-        cmap=cmap,
-        norm=norm,
-        extent=[min_lon, max_lon, min_lat, max_lat],
-        interpolation='bilinear',
-    )
-
-    # plot observed events
-    dot_sizes = dot_size([*scatter_catalog['magnitude'], 7.5],
-                         smallest=10, largest=2600, interpolation_power=3)[:-1]
-
-    ax.scatter(scatter_catalog['longitude'],
-               scatter_catalog['latitude'],
-               color='none',
-               edgecolor=scatter_color,
-               marker='o',
-               s=dot_sizes,
-               linewidth=0.5,
-               )
-
-    # show only the part inside the polygon
-    x, y = bounding_polygon.exterior.xy
-    data_clip_path = list(zip(y, x))
-    chpoly = plt.Polygon(data_clip_path,
-                         edgecolor='k',
-                         facecolor='none',
-                         lw=0,
-                         zorder=10,
-                         transform=ax.transData,
-                         figure=fig)
-    ax.add_patch(chpoly)
-    im.set_clip_path(chpoly)
-
-    # border of Switzerland
-    shpfilename = shapereader.natural_earth('10m',
-                                            'cultural',
-                                            'admin_0_countries')
-    df = geopandas.read_file(shpfilename)
-    poly = [df.loc[df['ADMIN'] == 'Switzerland']['geometry'].values[0]]
-
-    ax.plot(poly[0].exterior.xy[0],
-            poly[0].exterior.xy[1],
-            color=scatter_color,
-            lw=1,
-            zorder=10)
-
-    # Colorbar and legend
-    cbar = plt.colorbar(
-        im, label=f'Probability increase to a normal day\nof at least one M≥{
-            m_thresh:.1f} event in 7 days',
-        shrink=0.5, orientation='horizontal', pad=0.0, extend='max')
-    cbar.ax.minorticks_off()
-    cbar_ticks = np.arange(norm_min, norm_max, 0.5)
-    cbar_labels = [r'{}$\times$'.format(np.format_float_positional(
-        10**i, trim='-', precision=0)) for i in cbar_ticks]
-    if cbar_ticks[0] > 0:
-        cbar_labels[0] = '1-' + cbar_labels[0]
-    cbar_labels[-1] = '≥' + cbar_labels[-1]
-    cbar.set_ticks(cbar_ticks, labels=cbar_labels)
-
-    ax.set_aspect(1.4)
-    ax.axis('off')
-
-    return fig
-
-
-def create_line_plot(data,
-                     x_col,
-                     y_col,
-                     xlabel=None,
-                     ylabel=None):
-    """
-    Creates a line plot from a given DataFrame and returns the figure object.
-
-    Parameters:
-    - data (pd.DataFrame): The input DataFrame.
-    - x_col (str): Column name for x-axis.
-    - y_col (str): Column name for y-axis.
-    - title (str, optional): Title of the plot. Default is "Line Plot".
-    - xlabel (str, optional): Label for x-axis. Default is None (uses x_col).
-    - ylabel (str, optional): Label for y-axis. Default is None (uses y_col).
-
-    Returns:
-    - fig (matplotlib.figure.Figure): The created figure object.
-    """
-
-    fig, ax = plt.subplots(figsize=(8, 3))  # Create figure and axis
-    ax.plot(data[x_col], data[y_col], marker=None,
-            linestyle="-", color="b", label=y_col)
-    # fix the y axis to start at 0
-    ax.set_ylim(bottom=0)
-    # Labels and title
-    ax.set_xlabel(xlabel if xlabel else x_col)
-    ax.set_ylabel(ylabel if ylabel else y_col)
-
-    # Additional styling
-    ax.grid(True)
-
-    return fig  # Return the figure object
 
 
 def plot_rel_map_plotly(ratio: np.ndarray,
@@ -176,9 +46,6 @@ def plot_rel_map_plotly(ratio: np.ndarray,
         cbar_labels[0] = '1-' + cbar_labels[0]
     cbar_labels[-1] = '≥' + cbar_labels[-1]
 
-    # cbar_title = 'Probability increase to a normal day<br>' \
-    #     f'of at least one M≥{m_thresh:.1f} event in 7 days'
-
     # Create figure
     fig = go.Figure(
         data=go.Heatmap(
@@ -190,8 +57,6 @@ def plot_rel_map_plotly(ratio: np.ndarray,
             zmax=norm_max,
             showscale=True,
             colorbar=dict(
-                # title=cbar_title,
-                # title_side='bottom',
                 tickvals=cbar_ticks,
                 ticktext=cbar_labels,
                 tickmode='array',
@@ -284,7 +149,7 @@ def prob_and_mag_plot(times: pd.Series,
                       catalog: pd.DataFrame,
                       current_time: datetime,
                       avg_p: float | None,
-                      min_mag: float) -> plt.Figure:
+                      ylabel: str) -> plt.Figure:
 
     probabilities = probabilities
 
@@ -302,20 +167,21 @@ def prob_and_mag_plot(times: pd.Series,
         color='k'
     )
 
-    ax0.set_ylabel(
-        f"Probability of at least one M≥{min_mag:.1f} "
-        "\nevent in Switzerland in 7 days")
+    ax0.set_ylabel(ylabel)
 
     # make y axis percentages
     ax0.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
 
+    xlim = ax0.get_xlim()
+    xrange = xlim[1] - xlim[0]
+    current_x = mdates.date2num(current_time)
+    current_x_offset = current_x - xlim[0]
+
     if avg_p is not None:
         ylim = ax0.get_ylim()
-        xlim = ax0.get_xlim()
         yrange = ylim[1] - ylim[0]
-        xrange = xlim[1] - xlim[0]
-        if (mdates.date2num(current_time) - xlim[0]) > (xrange / 2):
-            lta_x_offset = xlim[0] + xrange * 0.1
+        if current_x_offset > (xrange / 2):
+            lta_x_offset = xlim[0] + xrange * 0.2
         else:
             lta_x_offset = xlim[1] - xrange * 0.2
         lta_y_offset = avg_p + yrange * 0.03
@@ -330,26 +196,22 @@ def prob_and_mag_plot(times: pd.Series,
                  backgroundcolor='white',
                  color='k')
 
-    if min_mag <= 3.5:
-        label_current = f"current {current_prob:.0%}"
-    elif min_mag <= 4.5:
-        label_current = f"current {current_prob:.1%}"
-    else:
-        label_current = f"current {current_prob:.2%}"
+    label_current = f"current {current_prob:.2%}"
 
     ylim = ax0.get_ylim()
-    xlim = ax0.get_xlim()
     yrange = ylim[1] - ylim[0]
-    xrange = xlim[1] - xlim[0]
-
-    current_x_offset = mdates.date2num(current_time) + xrange * 0.005
     if (current_prob - ylim[0]) < (yrange / 2):
         current_y_offset = ylim[1] - yrange * 0.05
     else:
         current_y_offset = current_prob - yrange * 0.05
 
+    if current_x_offset > (xrange / 2):
+        current_x_pos = current_x - xrange * 0.02
+    else:
+        current_x_pos = current_x + xrange * 0.005
+
     ax0.axvline(current_time, color='k')
-    ax0.text(current_x_offset,
+    ax0.text(current_x_pos,
              current_y_offset,
              label_current,
              rotation=90,
