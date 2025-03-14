@@ -12,7 +12,8 @@ from app import get_config
 from app.utils import hash_polygon
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300,
+               show_spinner=False)
 def get_forecasts(forecastseries_oid: str) -> list:
     response = requests.get(f'{get_config().WEBSERVICE_URL}'
                             '/v1/forecastseries/'
@@ -47,7 +48,8 @@ def get_forecast(forecast_oid: str) -> dict:
 
 
 @st.cache_data(ttl=3600,
-               hash_funcs={Polygon: hash_polygon})
+               hash_funcs={Polygon: hash_polygon},
+               show_spinner=False)
 def get_event_count_grid(modelrun_oid: str,
                          geometry: Polygon):
     min_lon, min_lat, max_lon, max_lat = geometry.bounds
@@ -77,7 +79,8 @@ def get_event_count_grid(modelrun_oid: str,
 
 
 @st.cache_data(ttl=3600,
-               hash_funcs={Polygon: hash_polygon})
+               hash_funcs={Polygon: hash_polygon},
+               show_spinner=False)
 def get_forecast_seismicityobservation(forecast_oid: str,
                                        start_time: datetime,
                                        end_time: datetime,
@@ -104,7 +107,8 @@ def get_forecast_seismicityobservation(forecast_oid: str,
 
 
 @st.cache_data(ttl=300,
-               hash_funcs={Polygon: hash_polygon})
+               hash_funcs={Polygon: hash_polygon},
+               show_spinner=False)
 def get_forecastseries_event_counts(forecastseries_oid: str,
                                     modelconfig_oid: str,
                                     bounding_polygon: Polygon):
